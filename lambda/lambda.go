@@ -53,6 +53,9 @@ var (
 
 const AWS_MAX_TIMEOUT = 295
 
+// TODO: Enable to change in config file
+const BIN_SIZE = time.Duration(10) * time.Millisecond // in milliseconds
+
 func main() {
 	lambdaSettings := parseLambdaSettings()
 	Lambda := newLambda(lambdaSettings)
@@ -474,6 +477,20 @@ func NewRequestMetric(region string, runnerID int) *requestMetric {
 	return metric
 }
 
+// Mutates counts
+// size : bin size
+func bin(value int64, counts *map[int64]int, size time.Duration) {
+    // n := value - (value % int64(size))
+	// Round down to nearest multiple of size
+	ns := time.Duration(value)
+	n := int64(ns - (ns % size))
+    if _, exists := (*counts)[n]; exists {
+        (*counts)[n] += 1
+    } else {
+        (*counts)[n] = 1
+    }
+}
+
 func (m *requestMetric) addRequest(r *requestResult) {
 	agg := m.aggregatedResults
 	agg.RequestCount++
@@ -488,8 +505,20 @@ func (m *requestMetric) addRequest(r *requestResult) {
 	} else if r.ConnectionError {
 		agg.ConnectionErrors++
 	} else {
+		// XXX need &agg.[...]?
+		bin(r.ElapsedLastByte, &agg.ReqTimesBinned, BIN_SIZE)
+
+		// TODO: only calc. average from successful requests
+		// e.g. requestCount - ConnErrors - TimedOut
+
 		agg.BytesRead += r.Bytes
+
+		agg.SumReqSq += r.ElapsedLastByte * r.ElapsedLastByte
+
+		// Store both
 		m.requestTimeTotal += r.ElapsedLastByte
+		agg.SumReqTime += r.ElapsedLastByte
+
 		m.timeToFirstTotal += r.ElapsedFirstByte
 
 		agg.Fastest = Min(r.ElapsedLastByte, agg.Fastest)
@@ -533,11 +562,13 @@ func (m *requestMetric) resetAndKeepTotalReqs() {
 	m.requestTimeTotal = 0
 	m.timeToFirstTotal = 0
 	m.aggregatedResults = &api.RunnerResult{
+		// Reset anything that shouldn't go back to its type's zero.
 		Region:   m.aggregatedResults.Region,
 		RunnerID: m.aggregatedResults.RunnerID,
 		Statuses: make(map[string]int),
-		Fastest:  math.MaxInt64,
-		Finished: false,
+		ReqTimesBinned: make(map[int64]int),
+		Fastest:  math.MaxInt64, // i.e. set min (ms) to MaxInt
+		Finished: false, // this will happen anyway, right?
 	}
 }
 

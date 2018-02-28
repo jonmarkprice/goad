@@ -25,7 +25,11 @@ type AggData struct {
 	Fastest              int64
 	Region               string
 	FatalError           string
-	Finished             bool
+	Finished			 bool
+	// new
+	SumReqTime			int64
+	SumReqSq			int64
+	ReqTimesBinned		map[int64]int
 }
 
 // LambdaResults type
@@ -77,6 +81,7 @@ func SetupRegionsAggData(lambdaCount int) *LambdaResults {
 	}
 	for i := 0; i < lambdaCount; i++ {
 		lambdaResults.Lambdas[i].Statuses = make(map[string]int)
+		lambdaResults.Lambdas[i].ReqTimesBinned = make(map[int64]int)
 	}
 	return lambdaResults
 }
@@ -85,6 +90,7 @@ func sumAggData(dataArray []AggData) AggData {
 	sum := AggData{
 		Fastest:  math.MaxInt64,
 		Statuses: make(map[string]int),
+		ReqTimesBinned: make(map[int64]int),
 		Finished: true,
 	}
 	for _, lambda := range dataArray {
@@ -106,6 +112,13 @@ func sumAggData(dataArray []AggData) AggData {
 		for key := range lambda.Statuses {
 			sum.Statuses[key] += lambda.Statuses[key]
 		}
+
+		for key := range lambda.ReqTimesBinned {
+			sum.ReqTimesBinned[key] += lambda.ReqTimesBinned[key]
+		}
+
+		sum.SumReqTime += lambda.SumReqTime
+		sum.SumReqSq += lambda.SumReqSq
 		sum.TimeDelta += lambda.TimeDelta
 		sum.TotalConnectionError += lambda.TotalConnectionError
 		sum.TotalReqs += lambda.TotalReqs
@@ -144,13 +157,24 @@ func AddResult(data *AggData, result *api.RunnerResult) {
 		data.AveReqPerSec = float64(data.TotalReqs) / float64(data.TimeDelta.Seconds())
 	}
 
+	// Aggregate maps // TODO this could be a fn.
 	for key, value := range result.Statuses {
 		data.Statuses[key] += value
 	}
 
+	// XXX will += work if no key?
+	// panic "assignment to entry in nil map"
+	for key, value := range result.ReqTimesBinned {
+		data.ReqTimesBinned[key] += value
+	}
+
+	data.SumReqTime += result.SumReqTime
+	data.SumReqSq += result.SumReqSq
+
 	if result.Slowest > data.Slowest {
 		data.Slowest = result.Slowest
 	}
+
 	if result.Fastest > 0 && (data.Fastest == 0 || result.Fastest < data.Fastest) {
 		data.Fastest = result.Fastest
 	}
