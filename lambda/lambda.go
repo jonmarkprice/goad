@@ -54,7 +54,7 @@ var (
 const AWS_MAX_TIMEOUT = 295
 
 // TODO: Enable to change in config file
-const BIN_SIZE = time.Duration(10) * time.Millisecond // in milliseconds
+const BIN_SIZE = 10 //time.Duration(10) * time.Millisecond // in milliseconds
 
 func main() {
 	lambdaSettings := parseLambdaSettings()
@@ -479,11 +479,11 @@ func NewRequestMetric(region string, runnerID int) *requestMetric {
 
 // Mutates counts
 // size : bin size
-func bin(value int64, counts *map[int64]int, size time.Duration) {
+func bin(value int64, counts *map[int64]int, size int64) {
     // n := value - (value % int64(size))
 	// Round down to nearest multiple of size
-	ns := time.Duration(value)
-	n := int64(ns - (ns % size))
+	// ms := time.Duration(value)
+	n := int64(value - (value % size))
     if _, exists := (*counts)[n]; exists {
         (*counts)[n] += 1
     } else {
@@ -505,20 +505,16 @@ func (m *requestMetric) addRequest(r *requestResult) {
 	} else if r.ConnectionError {
 		agg.ConnectionErrors++
 	} else {
-		// XXX need &agg.[...]?
-		bin(r.ElapsedLastByte, &agg.ReqTimesBinned, BIN_SIZE)
+		// Use millisecond, not nano-second values:
+		ms := int64(time.Duration(r.ElapsedLastByte) / time.Millisecond)
+		agg.SumReqSq += ms * ms
+		agg.SumReqTime += ms
 
-		// TODO: only calc. average from successful requests
-		// e.g. requestCount - ConnErrors - TimedOut
+		bin(ms, &agg.ReqTimesBinned, BIN_SIZE)
 
 		agg.BytesRead += r.Bytes
 
-		agg.SumReqSq += r.ElapsedLastByte * r.ElapsedLastByte
-
-		// Store both
 		m.requestTimeTotal += r.ElapsedLastByte
-		agg.SumReqTime += r.ElapsedLastByte
-
 		m.timeToFirstTotal += r.ElapsedFirstByte
 
 		agg.Fastest = Min(r.ElapsedLastByte, agg.Fastest)

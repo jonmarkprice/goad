@@ -80,11 +80,6 @@ var (
 	writeIni        = writeIniFlag.Bool()
 )
 
-/* TODO need 
-[ ] printing (import)
-[ ] updateConfig (loc), 
-[ ] TODO (mb) saveJSONSummary 
-*/
 func Run() {
 	app.HelpFlag.Short('h')
 	app.Version(version.String())
@@ -128,8 +123,7 @@ func Run() {
 		// This should work "as is", I think.
 	}
 
-	// defer?
-	saveJSONSummary("saved.json", results, tests)
+	defer saveJSONSummary("saved.json", results, tests)
 }
 
 // Format of data to serialize as JSON
@@ -138,7 +132,7 @@ type output struct {
 	Requests	int
 	Path		string // or url?
 	Regions		map[string]result.AggData
-	Overall		result.AggData
+	Overall		*analyzedResults
 }
 
 // This could also be a reciever of TestConfig
@@ -149,8 +143,61 @@ func updateConfiguration(config *types.TestConfig, test *testentry.TestEntry) {
 	config.Requests = test.Requests
 }
 
+/* Current JSON structure:
+[
+	{
+		concurrency, req, path, 
+		regions: {[region]: AggData...},
+		overall: AggData <-- TODO: make different data type, add sd, mb bin graph
+	}
+]
+
+AggData is already built into all of the maps, etc.
+I could either "tack" on std dev. to overall data.... yes
+
+*/
+
+// TODO: replace, or compose "sumAllLambdas" with a function that returns 
+// a new datatype, analyzed results.
+
+// Could also be the overall results
+type analyzedResults struct {
+	Summed				result.AggData
+	StandardDeviation	float64
+	Variance			float64
+	Mean				float64
+}
+
+// Are we getting overflow or something?
+// mb. I should be calculating the total based off of ms, not ns!
+// This could be the "catastrophic rounding" because my k = 175 is << than the
+// actual values which are in ns.
+func calculateFinalStatistics(data result.AggData) *analyzedResults {
+	sumSq := float64(data.SumReqSq)
+	sum := float64(data.SumReqTime)
+	n := float64(data.TotalReqs - data.TotalTimedOut - data.TotalConnectionError)
+
+	variance := (sumSq - (sum * sum)/n)/(n - 1.0)
+
+	fmt.Printf("N: %d, ", data.TotalReqs)
+	fmt.Printf("Variance: %f, ", variance)
+	fmt.Printf("SD: %f\n", math.Sqrt(variance))
+
+	if data.TotalReqs == 0 {
+		fmt.Printf("Got n of 0.")
+		return nil
+	}
+
+	return &analyzedResults{
+		Summed: data,
+		StandardDeviation: math.Sqrt(variance),
+		Variance: variance,
+		Mean: sum / n,
+	}
+}
+
 // TODO rename __results
-func saveJSONSummary(path string, __results []result.LambdaResults,
+func saveJSONSummary(path string, results []result.LambdaResults,
 					 tests []testentry.TestEntry) {
 	data := make([]output, len(tests))
 
@@ -168,8 +215,8 @@ func saveJSONSummary(path string, __results []result.LambdaResults,
 			Concurrency: test.Concurrency,
 			Requests: test.Requests,
 			Path: test.URL,
-			Regions: __results[index].RegionsData(),
-			Overall: __results[index].SumAllLambdas(),
+			Regions: results[index].RegionsData(),
+			Overall: calculateFinalStatistics(results[index].SumAllLambdas()),
 		}
 		// TODO: may want something like this...
 		// if len(results.Regions()) == 0 {
