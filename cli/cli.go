@@ -24,6 +24,13 @@ import (
 	"github.com/goadapp/goad/result"
 	"github.com/goadapp/goad/version"
 	"github.com/nsf/termbox-go"
+
+	// TODO move into goad
+	"results/printing"
+	"results/testentry"
+
+	// "results/config"
+	"github.com/goadapp/goad/table"
 )
 
 const (
@@ -73,7 +80,11 @@ var (
 	writeIni        = writeIniFlag.Bool()
 )
 
-// Run the goad cli
+/* TODO need 
+[ ] printing (import)
+[ ] updateConfig (loc), 
+[ ] TODO (mb) saveJSONSummary 
+*/
 func Run() {
 	app.HelpFlag.Short('h')
 	app.Version(version.String())
@@ -83,14 +94,102 @@ func Run() {
 	err := config.Check()
 	goad.HandleErr(err)
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) // but interrupts from kbd are blocked by termbox
+    sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) // but interrupts
+		//... from kbd are blocked by termbox.
 
-	result := start(config, sigChan)
-	defer printSummary(result)
-	if config.Output != "" {
-		defer saveJSONSummary(*outputFile, result)
+	////////////////////////////////////////////////////////////////////
+
+	tests, err := table.LoadTests("table.ini")
+	if err != nil {
+		panic("Could not load ini file.");
 	}
+
+	results := make([]result.LambdaResults, len(tests))
+
+	// Each test here needs at least a url/path, a conc. setting, and a num of
+	// requests.
+
+	// config := aggregateConfiguration() // Mocked-out
+	for index, test := range tests {
+		fmt.Printf("\n=============== Test %d ===============\n", index)
+
+		// config := getConfiguration(&test) // NEW
+
+		updateConfiguration(config, &test)
+		results[index] = start(config, sigChan) // XXX we can share, right?
+
+		for index, region := range results[index].Lambdas {
+			fmt.Printf("Region %d:\n", index)
+			printing.PrintData(region)
+		}
+
+		// TODO // printSummary(result) // NOTE they were using defer
+		// This should work "as is", I think.
+	}
+
+	// defer?
+	saveJSONSummary("saved.json", results, tests)
+}
+
+// Format of data to serialize as JSON
+type output struct {
+	Concurrency	int
+	Requests	int
+	Path		string // or url?
+	Regions		map[string]result.AggData
+	Overall		result.AggData
+}
+
+// This could also be a reciever of TestConfig
+func updateConfiguration(config *types.TestConfig, test *testentry.TestEntry) {
+	// No return. Just update the config each time for the next test
+	config.URL = test.URL
+	config.Concurrency = test.Concurrency
+	config.Requests = test.Requests
+}
+
+// TODO rename __results
+func saveJSONSummary(path string, __results []result.LambdaResults,
+					 tests []testentry.TestEntry) {
+	data := make([]output, len(tests))
+
+	// TODO
+	// We need to integrate this with our code to bin data and calculate
+	// standard deviation.
+	// This will need to go "further up" in Goad, since I need access
+	// to *each* result.
+	// This current part resides in CLI, while those calculations need to take
+	// place in each Lambda.
+
+	// Build data structure to be serialized
+	for index, test := range tests {
+		data[index] = output{
+			Concurrency: test.Concurrency,
+			Requests: test.Requests,
+			Path: test.URL,
+			Regions: __results[index].RegionsData(),
+			Overall: __results[index].SumAllLambdas(),
+		}
+		// TODO: may want something like this...
+		// if len(results.Regions()) == 0 {
+		//	return
+		// }
+	}
+
+	// Serialize to JSON
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// Write to file
+    err = ioutil.WriteFile(path, b, 0644)
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
 }
 
 func writeIniFile() {
@@ -282,6 +381,24 @@ func parseRegionsForBackwardsCompatibility(regions []string) []string {
 	}
 	return parsedRegions
 }
+
+/*
+func start(t *types.TestConfig, sigChan chan os.Signal) result.LambdaResults {
+    // TODO Here or earlier, mock out regions..
+
+	fmt.Printf("[%d x %d to %s]\n", t.Requests, t.Concurrency, t.URL)
+
+    // Mock some results
+    statuses := make(map[string]int)
+    statuses["200"] = t.Requests / 2
+
+    return result.LambdaResults{
+        Lambdas: []result.AggData{
+            {TotalReqs: t.Requests / 2, Statuses: statuses},
+            {TotalReqs: t.Requests / 2, Statuses: statuses},
+        },
+    }
+}*/
 
 func start(test *types.TestConfig, sigChan chan os.Signal) result.LambdaResults {
 	var currentResult result.LambdaResults
@@ -486,23 +603,3 @@ func printSummary(results result.LambdaResults) {
 	fmt.Println("")
 }
 
-func saveJSONSummary(path string, results result.LambdaResults) {
-	if len(results.Regions()) == 0 {
-		return
-	}
-	dataForRegions := results.RegionsData()
-
-	overall := results.SumAllLambdas()
-
-	dataForRegions["overall"] = overall
-	b, err := json.MarshalIndent(dataForRegions, "", "  ")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	err = ioutil.WriteFile(path, b, 0644)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-}

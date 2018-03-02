@@ -4,6 +4,7 @@ import (
 	"math"
 	"sort"
 	"time"
+	"fmt"
 
 	"github.com/goadapp/goad/api"
 	"github.com/goadapp/goad/goad/util"
@@ -26,6 +27,7 @@ type AggData struct {
 	Region               string
 	FatalError           string
 	Finished			 bool
+
 	// new
 	SumReqTime			int64
 	SumReqSq			int64
@@ -67,6 +69,7 @@ func (r *LambdaResults) SumAllLambdas() AggData {
 //ResultsForRegion return the sum of results for a given regions
 func (r *LambdaResults) ResultsForRegion(region string) []AggData {
 	lambdasOfRegion := make([]AggData, 0)
+	fmt.Println("Summing data for region ", region)
 	for _, lambda := range r.Lambdas {
 		if lambda.Region == region {
 			lambdasOfRegion = append(lambdasOfRegion, lambda)
@@ -125,8 +128,15 @@ func sumAggData(dataArray []AggData) AggData {
 		sum.TotalTimedOut += lambda.TotalTimedOut
 		sum.TotBytesRead += lambda.TotBytesRead
 	}
-	sum.AveTimeForReq = sum.AveTimeForReq / int64(len(dataArray))
-	sum.AveTimeToFirst = sum.AveTimeToFirst / int64(len(dataArray))
+
+	// Debugging
+	// In case there was no data
+	if len(dataArray) > 0 {
+		sum.AveTimeForReq = sum.AveTimeForReq / int64(len(dataArray))
+		sum.AveTimeToFirst = sum.AveTimeToFirst / int64(len(dataArray))
+	} else {
+		fmt.Println("No data for region ", sum.Region)
+	}
 	return sum
 }
 
