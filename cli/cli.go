@@ -91,23 +91,21 @@ func Run() {
 
 	////////////////////////////////////////////////////////////////////
 
+	// XXX Don't hard-code
 	tests, err := table.LoadTests("table.ini")
 	if err != nil {
 		panic("Could not load ini file.");
 	}
 
 	results := make([]result.LambdaResults, len(tests))
+	baseURL := config.URL
 
 	// Each test here needs at least a url/path, a conc. setting, and a num of
 	// requests.
-
-	// config := aggregateConfiguration() // Mocked-out
 	for index, test := range tests {
 		fmt.Printf("\n=============== Test %d ===============\n", index)
 
-		// config := getConfiguration(&test) // NEW
-
-		updateConfiguration(config, &test)
+		updateConfiguration(config, &test, baseURL)
 		results[index] = start(config, sigChan) // XXX we can share, right?
 
 		for index, region := range results[index].Lambdas {
@@ -118,14 +116,12 @@ func Run() {
 		// TODO // printSummary(result) // NOTE they were using defer
 		// This should work "as is", I think.
 
-		// /*
 		wait := 60 - time.Now().Second()
 		fmt.Printf("Waitng %d seconds...\n", wait)
 		time.Sleep(time.Duration(wait) * time.Second)
-		// */
 	}
 
-	defer saveJSONSummary("saved.json", results, tests)
+	defer saveJSONSummary(*outputFile, results, tests)
 }
 
 // Format of data to serialize as JSON
@@ -138,31 +134,20 @@ type output struct {
 }
 
 // This could also be a reciever of TestConfig
-func updateConfiguration(config *types.TestConfig, test *testentry.TestEntry) {
+func updateConfiguration(config *types.TestConfig, test *testentry.TestEntry,
+						 baseURL string) {
 	// No return. Just update the config each time for the next test
-	config.URL = test.URL
+	if config.URL == "" {
+		fmt.Println("Empty URL.")
+		os.Exit(1)
+	}
+	config.URL = baseURL + test.Path
+
+	fmt.Printf("URL: %s\n", config.URL)
 	config.Concurrency = test.Concurrency
 	config.Requests = test.Requests
 }
 
-/* Current JSON structure:
-[
-	{
-		concurrency, req, path, 
-		regions: {[region]: AggData...},
-		overall: AggData <-- TODO: make different data type, add sd, mb bin graph
-	}
-]
-
-AggData is already built into all of the maps, etc.
-I could either "tack" on std dev. to overall data.... yes
-
-*/
-
-// TODO: replace, or compose "sumAllLambdas" with a function that returns 
-// a new datatype, analyzed results.
-
-// Could also be the overall results
 type analyzedResults struct {
 	Summed				result.AggData
 	StandardDeviation	float64
@@ -215,7 +200,7 @@ func saveJSONSummary(path string, results []result.LambdaResults,
 		data[index] = output{
 			Concurrency: test.Concurrency,
 			Requests: test.Requests,
-			Path: test.URL,
+			Path: test.Path,
 			Regions: results[index].RegionsData(),
 			Overall: calculateFinalStatistics(results[index].SumAllLambdas()),
 		}
@@ -429,24 +414,6 @@ func parseRegionsForBackwardsCompatibility(regions []string) []string {
 	}
 	return parsedRegions
 }
-
-/*
-func start(t *types.TestConfig, sigChan chan os.Signal) result.LambdaResults {
-    // TODO Here or earlier, mock out regions..
-
-	fmt.Printf("[%d x %d to %s]\n", t.Requests, t.Concurrency, t.URL)
-
-    // Mock some results
-    statuses := make(map[string]int)
-    statuses["200"] = t.Requests / 2
-
-    return result.LambdaResults{
-        Lambdas: []result.AggData{
-            {TotalReqs: t.Requests / 2, Statuses: statuses},
-            {TotalReqs: t.Requests / 2, Statuses: statuses},
-        },
-    }
-}*/
 
 func start(test *types.TestConfig, sigChan chan os.Signal) result.LambdaResults {
 	var currentResult result.LambdaResults

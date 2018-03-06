@@ -26,14 +26,6 @@ func LoadTests(filePath string) ([]testentry.TestEntry, error) {
 
 	// TODO deal with cfg == nil
 	gen := cfg.Section("general")
-	if gen.HasKey("root-url") {
-		fmt.Println("Found root url")
-		s, _ := gen.GetKey("root-url")
-		fmt.Println(s);
-	}
-
-	url := gen.Key("root-url").String()
-
 	concurrencyLevels, err = gen.Key("concurrency").StrictInts(",")
 	if err != nil {
 		return empty, errors.New("Invalid concurrency levels. Must be" +
@@ -74,7 +66,7 @@ func LoadTests(filePath string) ([]testentry.TestEntry, error) {
 				tests[index] = testentry.TestEntry{
 					Concurrency:	concurrencyLevels[i],
 					Requests:		requests[j],
-					URL:			url + paths[k], // mb. use full URL
+					Path:			paths[k],
 				}
 			}
 		}

@@ -5,7 +5,7 @@ package testentry
 type TestEntry struct {
 	Concurrency		int
 	Requests		int
-	URL				string
+	Path			string
 	// DisplayName string
 }
 
