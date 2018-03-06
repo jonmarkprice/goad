@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"errors"
 	ini "gopkg.in/ini.v1"
-	"results/testentry"
+
+	"github.com/goadapp/goad/testentry"
 )
 
 func LoadTests(filePath string) ([]testentry.TestEntry, error) {

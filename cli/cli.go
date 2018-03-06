@@ -24,12 +24,8 @@ import (
 	"github.com/goadapp/goad/result"
 	"github.com/goadapp/goad/version"
 	"github.com/nsf/termbox-go"
-
-	// TODO move into goad
-	"results/printing"
-	"results/testentry"
-
-	// "results/config"
+	"github.com/goadapp/goad/printing"
+	"github.com/goadapp/goad/testentry"
 	"github.com/goadapp/goad/table"
 )
 
@@ -121,6 +117,12 @@ func Run() {
 
 		// TODO // printSummary(result) // NOTE they were using defer
 		// This should work "as is", I think.
+
+		// /*
+		wait := 60 - time.Now().Second()
+		fmt.Printf("Waitng %d seconds...\n", wait)
+		time.Sleep(time.Duration(wait) * time.Second)
+		// */
 	}
 
 	defer saveJSONSummary("saved.json", results, tests)
@@ -196,7 +198,6 @@ func calculateFinalStatistics(data result.AggData) *analyzedResults {
 	}
 }
 
-// TODO rename __results
 func saveJSONSummary(path string, results []result.LambdaResults,
 					 tests []testentry.TestEntry) {
 	data := make([]output, len(tests))
