@@ -5,6 +5,8 @@ import "time"
 // RunnerResult defines the common API for goad runners to send data back to the
 // cli.
 type RunnerResult struct {
+	StartTime        time.Time      `json:"end-time"`
+	EndTime          time.Time      `json:"start-time"`
 	AveTimeForReq    int64          `json:"ave-time-for-req"`
 	AveTimeToFirst   int64          `json:"ave-time-to-first"`
 	Fastest          int64          `json:"fastest"`
@@ -19,8 +21,7 @@ type RunnerResult struct {
 	ConnectionErrors int            `json:"connection-errors"`
 	RequestCount     int            `json:"request-count"`
 	TimedOut         int            `json:"timed-out"`
-	// New stuff
-	ReqTimesBinned	map[int64]int	`json:"req-times-binned"`
-	SumReqTime		int64			`json:"sum-req-time"`
-	SumReqSq		int64			`json:"sum-req-sq"`
+	ReqTimesBinned   map[int64]int  `json:"req-times-binned"`
+	SumReqTime       int64          `json:"sum-req-time"`
+	SumReqSq         int64          `json:"sum-req-sq"`
 }

@@ -193,7 +193,12 @@ func (l *goadLambda) runLoadTest() {
 	if timedOut && !finished {
 		l.forkNewLambda()
 	}
+
+	// Append final results
+	l.Metrics.aggregatedResults.EndTime = time.Now()
+	l.Metrics.aggregatedResults.StartTime = l.StartTime
 	l.Metrics.aggregatedResults.Finished = finished
+
 	l.Metrics.sendAggregatedResults(l.resultSender)
 	fmt.Printf("\nYay🎈  - %d requests completed\n", l.Settings.CompletedRequestCount)
 }

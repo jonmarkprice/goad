@@ -45,6 +45,7 @@ const (
 	regionKey      = "region"
 	writeIniKey    = "create-ini-template"
 	runDockerKey   = "run-docker"
+	safeKey		= "safe"
 )
 
 var (
@@ -74,6 +75,9 @@ var (
 	runDocker       = runDockerFlag.Bool()
 	writeIniFlag    = app.Flag(writeIniKey, "create sample configuration file \""+iniFile+"\" in current working directory")
 	writeIni        = writeIniFlag.Bool()
+
+	safeFlag	= app.Flag(safeKey, "wait an additional minute between tests")
+	safe		= safeFlag.Bool()
 )
 
 func Run() {
@@ -117,6 +121,9 @@ func Run() {
 		// This should work "as is", I think.
 
 		wait := 60 - time.Now().Second()
+		if *safe {
+			wait += 60 // Wait an additional full minute.
+		}
 		fmt.Printf("Waitng %d seconds...\n", wait)
 		time.Sleep(time.Duration(wait) * time.Second)
 	}

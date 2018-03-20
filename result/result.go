@@ -1,10 +1,10 @@
 package result
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"time"
-	"fmt"
 
 	"github.com/goadapp/goad/api"
 	"github.com/goadapp/goad/goad/util"
@@ -26,12 +26,14 @@ type AggData struct {
 	Fastest              int64
 	Region               string
 	FatalError           string
-	Finished			 bool
+	Finished             bool
+	StartTime            time.Time
+	EndTime              time.Time
 
 	// new
-	SumReqTime			int64
-	SumReqSq			int64
-	ReqTimesBinned		map[int64]int
+	SumReqTime     int64
+	SumReqSq       int64
+	ReqTimesBinned map[int64]int
 }
 
 // LambdaResults type
@@ -91,10 +93,10 @@ func SetupRegionsAggData(lambdaCount int) *LambdaResults {
 
 func sumAggData(dataArray []AggData) AggData {
 	sum := AggData{
-		Fastest:  math.MaxInt64,
-		Statuses: make(map[string]int),
+		Fastest:        math.MaxInt64,
+		Statuses:       make(map[string]int),
 		ReqTimesBinned: make(map[int64]int),
-		Finished: true,
+		Finished:       true,
 	}
 	for _, lambda := range dataArray {
 		sum.AveKBytesPerSec += lambda.AveKBytesPerSec
@@ -115,9 +117,14 @@ func sumAggData(dataArray []AggData) AggData {
 		for key := range lambda.Statuses {
 			sum.Statuses[key] += lambda.Statuses[key]
 		}
-
 		for key := range lambda.ReqTimesBinned {
 			sum.ReqTimesBinned[key] += lambda.ReqTimesBinned[key]
+		}
+		if sum.StartTime.IsZero() || lambda.StartTime.Before(sum.StartTime) {
+			sum.StartTime = lambda.StartTime
+		}
+		if lambda.EndTime.After(sum.EndTime) {
+			sum.EndTime = lambda.EndTime
 		}
 
 		sum.SumReqTime += lambda.SumReqTime
@@ -167,13 +174,19 @@ func AddResult(data *AggData, result *api.RunnerResult) {
 		data.AveReqPerSec = float64(data.TotalReqs) / float64(data.TimeDelta.Seconds())
 	}
 
+	if data.StartTime.IsZero() || result.StartTime.Before(data.StartTime) {
+		data.StartTime = result.StartTime
+	}
+
+	if result.EndTime.After(data.EndTime) {
+		data.EndTime = result.EndTime
+	}
+
 	// Aggregate maps // TODO this could be a fn.
 	for key, value := range result.Statuses {
 		data.Statuses[key] += value
 	}
 
-	// XXX will += work if no key?
-	// panic "assignment to entry in nil map"
 	for key, value := range result.ReqTimesBinned {
 		data.ReqTimesBinned[key] += value
 	}
