@@ -6,8 +6,6 @@ infrastructure/bindata.go
 site/Upstatic
 build/
 goad.ini
-table.ini
-print-csv
 
 *debug*
 

@@ -24,9 +24,6 @@ import (
 	"github.com/goadapp/goad/result"
 	"github.com/goadapp/goad/version"
 	"github.com/nsf/termbox-go"
-	"github.com/goadapp/goad/printing"
-	"github.com/goadapp/goad/testentry"
-	"github.com/goadapp/goad/table"
 )
 
 const (
@@ -45,7 +42,6 @@ const (
 	regionKey      = "region"
 	writeIniKey    = "create-ini-template"
 	runDockerKey   = "run-docker"
-	safeKey		= "safe"
 )
 
 var (
@@ -75,11 +71,9 @@ var (
 	runDocker       = runDockerFlag.Bool()
 	writeIniFlag    = app.Flag(writeIniKey, "create sample configuration file \""+iniFile+"\" in current working directory")
 	writeIni        = writeIniFlag.Bool()
-
-	safeFlag	= app.Flag(safeKey, "wait an additional minute between tests")
-	safe		= safeFlag.Bool()
 )
 
+// Run the goad cli
 func Run() {
 	app.HelpFlag.Short('h')
 	app.Version(version.String())
@@ -89,147 +83,14 @@ func Run() {
 	err := config.Check()
 	goad.HandleErr(err)
 
-    sigChan := make(chan os.Signal, 1)
-    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) // but interrupts
-		//... from kbd are blocked by termbox.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM) // but interrupts from kbd are blocked by termbox
 
-	////////////////////////////////////////////////////////////////////
-
-	// XXX Don't hard-code
-	tests, err := table.LoadTests("table.ini")
-	if err != nil {
-		panic("Could not load ini file.");
+	result := start(config, sigChan)
+	defer printSummary(result)
+	if config.Output != "" {
+		defer saveJSONSummary(*outputFile, result)
 	}
-
-	results := make([]result.LambdaResults, len(tests))
-	baseURL := config.URL
-
-	// Each test here needs at least a url/path, a conc. setting, and a num of
-	// requests.
-	for index, test := range tests {
-		fmt.Printf("\n=============== Test %d ===============\n", index)
-
-		updateConfiguration(config, &test, baseURL)
-		results[index] = start(config, sigChan) // XXX we can share, right?
-
-		for index, region := range results[index].Lambdas {
-			fmt.Printf("Region %d:\n", index)
-			printing.PrintData(region)
-		}
-
-		// TODO // printSummary(result) // NOTE they were using defer
-		// This should work "as is", I think.
-
-		wait := 60 - time.Now().Second()
-		if *safe {
-			wait += 60 // Wait an additional full minute.
-		}
-		fmt.Printf("Waitng %d seconds...\n", wait)
-		time.Sleep(time.Duration(wait) * time.Second)
-	}
-
-	defer saveJSONSummary(*outputFile, results, tests)
-}
-
-// Format of data to serialize as JSON
-type output struct {
-	Concurrency	int
-	Requests	int
-	Path		string // or url?
-	Regions		map[string]result.AggData
-	Overall		*analyzedResults
-}
-
-// This could also be a reciever of TestConfig
-func updateConfiguration(config *types.TestConfig, test *testentry.TestEntry,
-						 baseURL string) {
-	// No return. Just update the config each time for the next test
-	if config.URL == "" {
-		fmt.Println("Empty URL.")
-		os.Exit(1)
-	}
-	config.URL = baseURL + test.Path
-
-	fmt.Printf("URL: %s\n", config.URL)
-	config.Concurrency = test.Concurrency
-	config.Requests = test.Requests
-}
-
-type analyzedResults struct {
-	Summed				result.AggData
-	StandardDeviation	float64
-	Variance			float64
-	Mean				float64
-}
-
-// Are we getting overflow or something?
-// mb. I should be calculating the total based off of ms, not ns!
-// This could be the "catastrophic rounding" because my k = 175 is << than the
-// actual values which are in ns.
-func calculateFinalStatistics(data result.AggData) *analyzedResults {
-	sumSq := float64(data.SumReqSq)
-	sum := float64(data.SumReqTime)
-	n := float64(data.TotalReqs - data.TotalTimedOut - data.TotalConnectionError)
-
-	variance := (sumSq - (sum * sum)/n)/(n - 1.0)
-
-	fmt.Printf("N: %d, ", data.TotalReqs)
-	fmt.Printf("Variance: %f, ", variance)
-	fmt.Printf("SD: %f\n", math.Sqrt(variance))
-
-	if data.TotalReqs == 0 {
-		fmt.Printf("Got n of 0.")
-		return nil
-	}
-
-	return &analyzedResults{
-		Summed: data,
-		StandardDeviation: math.Sqrt(variance),
-		Variance: variance,
-		Mean: sum / n,
-	}
-}
-
-func saveJSONSummary(path string, results []result.LambdaResults,
-					 tests []testentry.TestEntry) {
-	data := make([]output, len(tests))
-
-	// TODO
-	// We need to integrate this with our code to bin data and calculate
-	// standard deviation.
-	// This will need to go "further up" in Goad, since I need access
-	// to *each* result.
-	// This current part resides in CLI, while those calculations need to take
-	// place in each Lambda.
-
-	// Build data structure to be serialized
-	for index, test := range tests {
-		data[index] = output{
-			Concurrency: test.Concurrency,
-			Requests: test.Requests,
-			Path: test.Path,
-			Regions: results[index].RegionsData(),
-			Overall: calculateFinalStatistics(results[index].SumAllLambdas()),
-		}
-		// TODO: may want something like this...
-		// if len(results.Regions()) == 0 {
-		//	return
-		// }
-	}
-
-	// Serialize to JSON
-	b, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// Write to file
-    err = ioutil.WriteFile(path, b, 0644)
-    if err != nil {
-        fmt.Println(err)
-        return
-    }
 }
 
 func writeIniFile() {
@@ -625,3 +486,23 @@ func printSummary(results result.LambdaResults) {
 	fmt.Println("")
 }
 
+func saveJSONSummary(path string, results result.LambdaResults) {
+	if len(results.Regions()) == 0 {
+		return
+	}
+	dataForRegions := results.RegionsData()
+
+	overall := results.SumAllLambdas()
+
+	dataForRegions["overall"] = overall
+	b, err := json.MarshalIndent(dataForRegions, "", "  ")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	err = ioutil.WriteFile(path, b, 0644)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+}
