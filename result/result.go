@@ -71,7 +71,6 @@ func (r *LambdaResults) SumAllLambdas() AggData {
 //ResultsForRegion return the sum of results for a given regions
 func (r *LambdaResults) ResultsForRegion(region string) []AggData {
 	lambdasOfRegion := make([]AggData, 0)
-	fmt.Println("Summing data for region ", region)
 	for _, lambda := range r.Lambdas {
 		if lambda.Region == region {
 			lambdasOfRegion = append(lambdasOfRegion, lambda)

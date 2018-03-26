@@ -490,12 +490,21 @@ func saveJSONSummary(path string, results result.LambdaResults) {
 	if len(results.Regions()) == 0 {
 		return
 	}
-	dataForRegions := results.RegionsData()
 
-	overall := results.SumAllLambdas()
+	// data := results.RegionsData()
+	// overall := results.SumAllLambdas()
+	// data["overall"] = overall
 
-	dataForRegions["overall"] = overall
-	b, err := json.MarshalIndent(dataForRegions, "", "  ")
+	data := output{
+		// TODO where do we get test?
+		Concurrency: *concurrency,
+		Requests:    *requests,
+		Path:        *url,
+		Regions:     results.RegionsData(),
+		Overall:     calculateFinalStatistics(results.SumAllLambdas()),
+	}
+
+	b, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -504,5 +513,45 @@ func saveJSONSummary(path string, results result.LambdaResults) {
 	if err != nil {
 		fmt.Println(err)
 		return
+	}
+}
+
+// Format of data to serialize as JSON
+type output struct {
+	Concurrency int
+	Requests    int
+	Path        string // or url?
+	Regions     map[string]result.AggData
+	Overall     *analyzedResults
+}
+
+type analyzedResults struct {
+	Summed            result.AggData
+	StandardDeviation float64
+	Variance          float64
+	Mean              float64
+}
+
+func calculateFinalStatistics(data result.AggData) *analyzedResults {
+	sumSq := float64(data.SumReqSq)
+	sum := float64(data.SumReqTime)
+	n := float64(data.TotalReqs - data.TotalTimedOut - data.TotalConnectionError)
+
+	variance := (sumSq - (sum*sum)/n) / (n - 1.0)
+
+	// fmt.Printf("N: %d, ", data.TotalReqs)
+	// fmt.Printf("Variance: %f, ", variance)
+	// fmt.Printf("SD: %f\n", math.Sqrt(variance))
+
+	if data.TotalReqs == 0 {
+		fmt.Printf("Got n of 0.")
+		return nil
+	}
+
+	return &analyzedResults{
+		Summed:            data,
+		StandardDeviation: math.Sqrt(variance),
+		Variance:          variance,
+		Mean:              sum / n,
 	}
 }
