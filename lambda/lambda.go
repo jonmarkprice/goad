@@ -484,7 +484,7 @@ func NewRequestMetric(region string, runnerID int) *requestMetric {
 
 // Mutates counts; NOTE: Maps are always references.
 // size : bin size
-func bin(value int64, counts map[int64]int, size int64) {
+func Bin(value int64, counts map[int64]int, size int64) {
 	n := int64(value - (value % size))
     _, ok := counts[n]
 	if ok {
@@ -513,7 +513,7 @@ func (m *requestMetric) addRequest(r *requestResult) {
 		agg.SumReqSq += ms * ms
 		agg.SumReqTime += ms
 
-		bin(ms, agg.ReqTimesBinned, BIN_SIZE)
+		Bin(ms, agg.ReqTimesBinned, BIN_SIZE)
 
 		agg.BytesRead += r.Bytes
 
