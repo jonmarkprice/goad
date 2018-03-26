@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"errors"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 	ini "gopkg.in/ini.v1"
@@ -495,13 +496,19 @@ func saveJSONSummary(path string, results result.LambdaResults) {
 	// overall := results.SumAllLambdas()
 	// data["overall"] = overall
 
+	statistics, err := CalculateFinalStatistics(results.SumAllLambdas())
+	if err != nil {
+		fmt.Printf("Statistics calculation failed: %s", err)
+		return
+	}
+
 	data := output{
-		// TODO where do we get test?
+		// TODO test
 		Concurrency: *concurrency,
 		Requests:    *requests,
 		Path:        *url,
 		Regions:     results.RegionsData(),
-		Overall:     calculateFinalStatistics(results.SumAllLambdas()),
+		Overall:     statistics,
 	}
 
 	b, err := json.MarshalIndent(data, "", "  ")
@@ -520,9 +527,9 @@ func saveJSONSummary(path string, results result.LambdaResults) {
 type output struct {
 	Concurrency int
 	Requests    int
-	Path        string // or url?
+	Path        string
 	Regions     map[string]result.AggData
-	Overall     *analyzedResults
+	Overall     analyzedResults
 }
 
 type analyzedResults struct {
@@ -532,26 +539,30 @@ type analyzedResults struct {
 	Mean              float64
 }
 
-func calculateFinalStatistics(data result.AggData) *analyzedResults {
+func CalculateFinalStatistics(data result.AggData) (analyzedResults, error) {
+	// Translate int -> float
 	sumSq := float64(data.SumReqSq)
 	sum := float64(data.SumReqTime)
 	n := float64(data.TotalReqs - data.TotalTimedOut - data.TotalConnectionError)
+	empty := analyzedResults{}
+	if n <= 0 {
+		return empty, errors.New("Got N <= 0.")
+	}
 
 	variance := (sumSq - (sum*sum)/n) / (n - 1.0)
+	mean := sum / n
 
-	// fmt.Printf("N: %d, ", data.TotalReqs)
-	// fmt.Printf("Variance: %f, ", variance)
-	// fmt.Printf("SD: %f\n", math.Sqrt(variance))
-
-	if data.TotalReqs == 0 {
-		fmt.Printf("Got n of 0.")
-		return nil
+	if variance < 0 {
+		return empty, errors.New("Negative variance.")
 	}
 
-	return &analyzedResults{
+	sd := math.Sqrt(variance)
+
+	results := analyzedResults{
 		Summed:            data,
-		StandardDeviation: math.Sqrt(variance),
+		StandardDeviation: sd,
 		Variance:          variance,
-		Mean:              sum / n,
+		Mean:              mean,
 	}
+	return results, nil
 }
