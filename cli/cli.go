@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,7 +15,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"errors"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 	ini "gopkg.in/ini.v1"
@@ -499,6 +499,12 @@ func saveJSONSummary(path string, results result.LambdaResults) {
 	statistics, err := CalculateFinalStatistics(results.SumAllLambdas())
 	if err != nil {
 		fmt.Printf("Statistics calculation failed: %s", err)
+		return
+	}
+
+	// Check that flags are all set
+	if concurreny == nil || requests == nil || url == nil {
+		fmt.Println("ERROR: Nil arguments.")
 		return
 	}
 

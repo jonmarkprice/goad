@@ -486,12 +486,12 @@ func NewRequestMetric(region string, runnerID int) *requestMetric {
 // size : bin size
 func Bin(value int64, counts map[int64]int, size int64) {
 	n := int64(value - (value % size))
-    _, ok := counts[n]
+	_, ok := counts[n]
 	if ok {
-        counts[n]++
-    } else {
-        counts[n] = 1
-    }
+		counts[n]++
+	} else {
+		counts[n] = 1
+	}
 }
 
 func (m *requestMetric) addRequest(r *requestResult) {
@@ -562,12 +562,12 @@ func (m *requestMetric) resetAndKeepTotalReqs() {
 	m.timeToFirstTotal = 0
 	m.aggregatedResults = &api.RunnerResult{
 		// Reset anything that shouldn't go back to its type's zero.
-		Region:   m.aggregatedResults.Region,
-		RunnerID: m.aggregatedResults.RunnerID,
-		Statuses: make(map[string]int),
+		Region:         m.aggregatedResults.Region,
+		RunnerID:       m.aggregatedResults.RunnerID,
+		Statuses:       make(map[string]int),
 		ReqTimesBinned: make(map[int64]int),
-		Fastest:  math.MaxInt64, // i.e. set min (ms) to MaxInt
-		Finished: false, // this will happen anyway, right?
+		Fastest:        math.MaxInt64, // i.e. set min (ms) to MaxInt
+		Finished:       false,         // this will happen anyway, right?
 	}
 }
 
