@@ -503,7 +503,7 @@ func saveJSONSummary(path string, results result.LambdaResults) {
 	}
 
 	// Check that flags are all set
-	if concurreny == nil || requests == nil || url == nil {
+	if concurrency == nil || requests == nil || url == nil {
 		fmt.Println("ERROR: Nil arguments.")
 		return
 	}
