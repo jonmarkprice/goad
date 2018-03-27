@@ -21,7 +21,7 @@ type RunnerResult struct {
 	ConnectionErrors int            `json:"connection-errors"`
 	RequestCount     int            `json:"request-count"`
 	TimedOut         int            `json:"timed-out"`
-	ReqTimesBinned   map[int64]int  `json:"req-times-binned"`
+	// ReqTimesBinned   map[int64]int  `json:"req-times-binned"`
 	SumReqTime       int64          `json:"sum-req-time"`
 	SumReqSq         int64          `json:"sum-req-sq"`
 }

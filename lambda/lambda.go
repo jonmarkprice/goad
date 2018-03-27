@@ -484,6 +484,7 @@ func NewRequestMetric(region string, runnerID int) *requestMetric {
 
 // Mutates counts; NOTE: Maps are always references.
 // size : bin size
+/*
 func Bin(value int64, counts map[int64]int, size int64) {
 	n := int64(value - (value % size))
 	_, ok := counts[n]
@@ -493,6 +494,7 @@ func Bin(value int64, counts map[int64]int, size int64) {
 		counts[n] = 1
 	}
 }
+*/
 
 func (m *requestMetric) addRequest(r *requestResult) {
 	agg := m.aggregatedResults
@@ -513,7 +515,7 @@ func (m *requestMetric) addRequest(r *requestResult) {
 		agg.SumReqSq += ms * ms
 		agg.SumReqTime += ms
 
-		Bin(ms, agg.ReqTimesBinned, BIN_SIZE)
+		// Bin(ms, agg.ReqTimesBinned, BIN_SIZE)
 
 		agg.BytesRead += r.Bytes
 
@@ -565,7 +567,7 @@ func (m *requestMetric) resetAndKeepTotalReqs() {
 		Region:         m.aggregatedResults.Region,
 		RunnerID:       m.aggregatedResults.RunnerID,
 		Statuses:       make(map[string]int),
-		ReqTimesBinned: make(map[int64]int),
+		// ReqTimesBinned: make(map[int64]int),
 		Fastest:        math.MaxInt64, // i.e. set min (ms) to MaxInt
 		Finished:       false,         // this will happen anyway, right?
 	}
