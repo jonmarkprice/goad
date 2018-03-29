@@ -33,7 +33,7 @@ type AggData struct {
 	// new
 	SumReqTime     int64
 	SumReqSq       int64
-	// ReqTimesBinned map[int64]int
+	ReqTimesBinned map[int64]int
 }
 
 // LambdaResults type
@@ -85,7 +85,7 @@ func SetupRegionsAggData(lambdaCount int) *LambdaResults {
 	}
 	for i := 0; i < lambdaCount; i++ {
 		lambdaResults.Lambdas[i].Statuses = make(map[string]int)
-		// lambdaResults.Lambdas[i].ReqTimesBinned = make(map[int64]int)
+		lambdaResults.Lambdas[i].ReqTimesBinned = make(map[int64]int)
 	}
 	return lambdaResults
 }
@@ -94,7 +94,7 @@ func sumAggData(dataArray []AggData) AggData {
 	sum := AggData{
 		Fastest:        math.MaxInt64,
 		Statuses:       make(map[string]int),
-		// ReqTimesBinned: make(map[int64]int),
+		ReqTimesBinned: make(map[int64]int),
 		Finished:       true,
 	}
 	for _, lambda := range dataArray {
@@ -116,9 +116,9 @@ func sumAggData(dataArray []AggData) AggData {
 		for key := range lambda.Statuses {
 			sum.Statuses[key] += lambda.Statuses[key]
 		}
-		//for key := range lambda.ReqTimesBinned {
-		//	sum.ReqTimesBinned[key] += lambda.ReqTimesBinned[key]
-		//}
+		for key := range lambda.ReqTimesBinned {
+			sum.ReqTimesBinned[key] += lambda.ReqTimesBinned[key]
+		}
 		if sum.StartTime.IsZero() || lambda.StartTime.Before(sum.StartTime) {
 			sum.StartTime = lambda.StartTime
 		}
@@ -186,9 +186,9 @@ func AddResult(data *AggData, result *api.RunnerResult) {
 		data.Statuses[key] += value
 	}
 
-	//for key, value := range result.ReqTimesBinned {
-	//	data.ReqTimesBinned[key] += value
-	//}
+	for key, value := range result.ReqTimesBinned {
+		data.ReqTimesBinned[key] += value
+	}
 
 	data.SumReqTime += result.SumReqTime
 	data.SumReqSq += result.SumReqSq
