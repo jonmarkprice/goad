@@ -115,6 +115,7 @@ type goadLambda struct {
 	resultSender  resultSender
 	results       chan requestResult
 	jobs          chan struct{}
+	requestTimes	chan int64
 	StartTime     time.Time
 	wg            sync.WaitGroup
 }
@@ -155,12 +156,22 @@ func (l *goadLambda) runLoadTest() {
 	timedOut := false
 	finished := false
 
+
+	allDone := make(chan bool)
+	readDone := make(chan bool)
+	go l.read(l.requestTimes, allDone, readDone)
+
 	for !timedOut && !finished {
 		select {
 		case r := <-l.results:
 			l.Settings.CompletedRequestCount++
 
 			l.Metrics.addRequest(&r)
+
+			// Send time to buffered channel
+			ms := int64(time.Duration(r.ElapsedLastByte) / time.Millisecond)
+			l.requestTimes <- ms
+
 			if l.Settings.CompletedRequestCount%1000 == 0 || l.Settings.CompletedRequestCount == l.Settings.MaxRequestCount {
 				fmt.Printf("\r%.2f%% done (%d requests out of %d)", (float64(l.Settings.CompletedRequestCount)/float64(l.Settings.MaxRequestCount))*100.0, l.Settings.CompletedRequestCount, l.Settings.MaxRequestCount)
 			}
@@ -194,13 +205,59 @@ func (l *goadLambda) runLoadTest() {
 		l.forkNewLambda()
 	}
 
-	// Append final results
+	// We know all requests have stopped here... I think.
+	allDone <- true
+	<-readDone
+	// Append final resultsi
+	/*
+	l.Metrics.aggregatedResults.ReqTimesBinned = make(map[int64]int)
+	for len(l.requestTimes) > 0 {
+		ms := <-l.requestTimes
+		bin := int64(ms - (ms % BIN_SIZE))
+		l.Metrics.aggregatedResults.ReqTimesBinned[bin]++
+	}*/
+
 	l.Metrics.aggregatedResults.EndTime = time.Now()
 	l.Metrics.aggregatedResults.StartTime = l.StartTime
 	l.Metrics.aggregatedResults.Finished = finished
 
 	l.Metrics.sendAggregatedResults(l.resultSender)
 	fmt.Printf("\nYay🎈  - %d requests completed\n", l.Settings.CompletedRequestCount)
+}
+
+func (l *goadLambda) read(results <-chan int64, allDone <-chan bool, readDone chan<- bool) {
+    // fmt.Println("All work finished.")
+    // m := make(map[int]int)
+    // for result := range results { // Clear channel
+    // for len(results) > 0 {
+    sendingDone := false
+    for !sendingDone {
+        select {
+        case ms := <-results:
+			// Bin
+			// ms := <-l.requestTimes
+			bin := int64(ms - (ms % BIN_SIZE))
+			l.Metrics.aggregatedResults.ReqTimesBinned[bin]++
+
+        case <-allDone:
+            sendingDone = true
+        }
+    }
+
+    // Clear backlog
+    for len(results) > 0 {
+		// Bin
+		// val := <-results
+        //m[ms]++
+
+		ms := <-results
+		bin := int64(ms - (ms % BIN_SIZE))
+		l.Metrics.aggregatedResults.ReqTimesBinned[bin]++
+    }
+
+    // Finished
+    fmt.Println("Done reading.")
+    readDone <- true
 }
 
 // newLambda creates a new Lambda to execute a load test from a given
@@ -222,6 +279,7 @@ func newLambda(s LambdaSettings) *goadLambda {
 	l.setupAwsSqsAdapter(awsSqsConfig)
 	l.setupJobQueue(remainingRequestCount)
 	l.results = make(chan requestResult)
+	l.requestTimes = make(chan int64, remainingRequestCount)
 	return l
 }
 
@@ -482,18 +540,6 @@ func NewRequestMetric(region string, runnerID int) *requestMetric {
 	return metric
 }
 
-// Mutates counts; NOTE: Maps are always references.
-// size : bin size
-func Bin(value int64, counts map[int64]int, size int64) {
-	n := int64(value - (value % size))
-	_, ok := counts[n]
-	if ok {
-		counts[n]++
-	} else {
-		counts[n] = 1
-	}
-}
-
 func (m *requestMetric) addRequest(r *requestResult) {
 	agg := m.aggregatedResults
 	agg.RequestCount++
@@ -512,8 +558,6 @@ func (m *requestMetric) addRequest(r *requestResult) {
 		ms := int64(time.Duration(r.ElapsedLastByte) / time.Millisecond)
 		agg.SumReqSq += ms * ms
 		agg.SumReqTime += ms
-
-		Bin(ms, agg.ReqTimesBinned, BIN_SIZE)
 
 		agg.BytesRead += r.Bytes
 
